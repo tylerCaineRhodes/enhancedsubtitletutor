@@ -1,17 +1,19 @@
 -- luacheck: globals mp
 
--- configuration
-local minimum_pause_time = 0.5
-local pause_time_modifier = 0.6
-local minimum_sub_length = 0.7
-local minimum_word_count = 3
-local ignore_formatted_subs = true
+local config = {
+    minimum_pause_time = 0.5,
+    pause_time_modifier = 0.6,
+    minimum_sub_length = 0.7,
+    minimum_word_count = 3,
+    ignore_formatted_subs = true
+}
 
--- state
-local active = false
-local pause_at_start = false
-local skip_next = false
-local timer = nil
+local state = {
+    active = false,
+    pause_at_start = false,
+    skip_next = false,
+    timer = nil
+}
 
 local function count_words(text)
     local count = 0
@@ -30,9 +32,9 @@ local function is_formatted_subtitle()
 end
 
 local function should_pause(sub_duration, sub_time, word_count)
-    local is_long_enough_time = sub_time >= minimum_pause_time
-    local is_long_enough_sub = sub_duration >= minimum_sub_length
-    local is_long_enough_words = word_count >= minimum_word_count
+    local is_long_enough_time = sub_time >= config.minimum_pause_time
+    local is_long_enough_sub = sub_duration >= config.minimum_sub_length
+    local is_long_enough_words = word_count >= config.minimum_word_count
 
     return is_long_enough_time and is_long_enough_sub and is_long_enough_words
 end
@@ -45,17 +47,17 @@ local function pause()
 
     if not sub_start or not sub_end or not sub_text then return end
 
-    if ignore_formatted_subs and is_formatted_subtitle() then return end
+    if config.ignore_formatted_subs and is_formatted_subtitle() then return end
 
     local sub_duration = sub_end - sub_start
-    local sub_time = sub_duration * pause_time_modifier
+    local sub_time = sub_duration * config.pause_time_modifier
     local word_count = count_words(sub_text)
 
     local should_pause = should_pause(sub_duration, sub_time, word_count)
 
     if should_pause then
-        if skip_next then
-            skip_next = false
+        if state.skip_next then
+            state.skip_next = false
             return
         end
 
@@ -63,16 +65,16 @@ local function pause()
         mp.set_property_bool("sub-visibility", true)
         mp.osd_message(" ", 0.001)
 
-        timer = mp.add_timeout(sub_time, function()
+        state.timer = mp.add_timeout(sub_time, function()
             mp.set_property_bool("pause", false)
             mp.set_property_bool("sub-visibility", false)
             mp.remove_key_binding("override-pause")
         end)
 
         mp.add_forced_key_binding("SPACE", "override-pause", function()
-            if timer then
-                timer:kill()
-                timer = nil
+            if state.timer then
+                state.timer:kill()
+                state.timer = nil
             end
             mp.remove_key_binding("override-pause")
         end)
@@ -81,7 +83,7 @@ end
 
 local function handle_sub_text_change(_, sub_text)
     if (sub_text ~= nil and sub_text ~= "") then
-        if (pause_at_start) then
+        if (state.pause_at_start) then
             pause()
         end
     end
@@ -90,7 +92,7 @@ end
 
 local function display_state()
     local msg
-    if (active) then
+    if (state.active) then
         msg = "Enhanced subtitle tutor (enabled)"
     else
         msg = "Enhanced subtitle tutor (disabled)"
@@ -99,40 +101,40 @@ local function display_state()
 end
 
 local function handle_seek()
-    if timer then
-        timer:kill()
-        timer = nil
+    if state.timer then
+        state.timer:kill()
+        state.timer = nil
     end
 
-    skip_next = false
+    state.skip_next = false
     mp.remove_key_binding("override-pause")
     mp.set_property_bool("sub-visibility", true)
 end
 
 local function handle_playback_restart()
-    skip_next = false
+    state.skip_next = false
 end
 
 
 local function toggle()
-    pause_at_start = not pause_at_start
+    state.pause_at_start = not state.pause_at_start
 
-    if (active) then
-        if (pause_at_start) then return end
+    if (state.active) then
+        if (state.pause_at_start) then return end
 
-        skip_next = false
+        state.skip_next = false
         mp.unobserve_property(handle_sub_text_change)
-        active = false
+        state.active = false
     else
         mp.observe_property("sub-text", "string", handle_sub_text_change)
-        active = true
+        state.active = true
     end
     display_state()
 end
 
 local function replay_sub()
-    if (pause_at_start) then
-        skip_next = true
+    if (state.pause_at_start) then
+        state.skip_next = true
     end
 
     local sub_start = mp.get_property_number("sub-start")
@@ -143,8 +145,17 @@ local function replay_sub()
 end
 
 mp.add_key_binding("n", "sub-pause-toggle-start", function() toggle() end)
-mp.add_key_binding("Alt+r", "sub-pause-skip-next", function() skip_next = true end)
+mp.add_key_binding("Alt+r", "sub-pause-skip-next", function() state.skip_next = true end)
 mp.add_key_binding("Ctrl+r", "sub-pause-replay", function() replay_sub() end)
+
+mp.add_key_binding('Ctrl+0', "decrease-pause-duration", function()
+    config.pause_time_modifier = config.pause_time_modifier - 0.05
+    mp.osd_message("Pause duration: " .. config.pause_time_modifier)
+end)
+mp.add_key_binding('Ctrl+1', "increase-pause-duration", function()
+    config.pause_time_modifier = config.pause_time_modifier + 0.05
+    mp.osd_message("Pause duration: " .. config.pause_time_modifier)
+end)
 
 mp.register_event("seek", handle_seek)
 mp.register_event("playback-restart", handle_playback_restart)
