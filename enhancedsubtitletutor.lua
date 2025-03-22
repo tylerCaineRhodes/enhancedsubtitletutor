@@ -15,7 +15,7 @@ local timer = nil
 
 local function count_words(text)
     local count = 0
-    for word in string.gmatch(text, "[%w']+") do
+    for _word in string.gmatch(text, "[%w']+") do
         count = count + 1
     end
     return count
@@ -52,8 +52,6 @@ local function pause()
     local word_count = count_words(sub_text)
 
     local should_pause = should_pause(sub_duration, sub_time, word_count)
-
-    print("Should pause: " .. tostring(should_pause))
 
     if should_pause then
         if skip_next then
@@ -111,13 +109,10 @@ local function handle_seek()
     mp.set_property_bool("sub-visibility", true)
 end
 
-mp.register_event("seek", handle_seek)
-
 local function handle_playback_restart()
     skip_next = false
 end
 
-mp.register_event("playback-restart", handle_playback_restart)
 
 local function toggle()
     pause_at_start = not pause_at_start
@@ -132,9 +127,6 @@ local function toggle()
         mp.observe_property("sub-text", "string", handle_sub_text_change)
         active = true
     end
-
-    print('active: ', active)
-    print('paus_at_start: ', pause_at_start)
     display_state()
 end
 
@@ -153,3 +145,6 @@ end
 mp.add_key_binding("n", "sub-pause-toggle-start", function() toggle() end)
 mp.add_key_binding("Alt+r", "sub-pause-skip-next", function() skip_next = true end)
 mp.add_key_binding("Ctrl+r", "sub-pause-replay", function() replay_sub() end)
+
+mp.register_event("seek", handle_seek)
+mp.register_event("playback-restart", handle_playback_restart)
