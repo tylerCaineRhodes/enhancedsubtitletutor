@@ -16,12 +16,18 @@ local state = {
 }
 
 local function count_words(text)
-    local count = 0
-    for _word in string.gmatch(text, "[%w']+") do
-        count = count + 1
+    if text:match("[\227\129\130-\233\191\191]") then
+        local _, count = text:gsub("%S", "")
+        return count
+    else
+        local count = 0
+        for _ in string.gmatch(text, "[%w']+") do
+            count = count + 1
+        end
+        return count
     end
-    return count
 end
+
 
 local function is_formatted_subtitle()
     local sub_style = mp.get_property("sub-style")
